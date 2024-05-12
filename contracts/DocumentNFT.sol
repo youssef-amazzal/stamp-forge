@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-// Uncomment this line to use console.log
 import "hardhat/console.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "./AuthorityRegistry.sol"; // Import Authority contract
+import "./Signature.sol"; // Import Signature contract
 
 contract DocumentNFT is ERC1155 {
     AuthorityRegistry public authorityRegistry; // Reference to Authority contract
+    Signature public signature; // Reference to Signature contract
 
     // Struct to represent document metadata
     struct DocumentMetadata {
@@ -25,8 +26,9 @@ contract DocumentNFT is ERC1155 {
     // Event emitted when a new document NFT is minted
     event DocumentMinted(uint256 indexed tokenId, address indexed owner);
 
-    constructor(AuthorityRegistry _authorityRegistry, string memory _uri) ERC1155(_uri) {
+    constructor(AuthorityRegistry _authorityRegistry, Signature _signature, string memory _uri) ERC1155(_uri) {
         authorityRegistry = _authorityRegistry; // Initialize Authority contract reference
+        signature = _signature; // Initialize Signature contract reference
     }
 
     // Function to mint a new document NFT
@@ -46,6 +48,16 @@ contract DocumentNFT is ERC1155 {
         _mint(_to, tokenId, 1, "");
         emit DocumentMinted(tokenId, _to);
         return tokenId;
+    }
+
+    // Function to sign a document
+    function signDocument(uint256 tokenId, bytes32 r, bytes32 s, uint8 v) external {
+        signature.signDocument(tokenId, r, s, v);
+    }
+
+    // Function to verify if a document is signed by a list of authorities
+    function verifySignatures(uint256 tokenId, address[] memory authorities) external view returns (bool) {
+        return signature.verifySignatures(tokenId, authorities);
     }
 
     // Function to get document metadata
