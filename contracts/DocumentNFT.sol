@@ -15,13 +15,17 @@ contract DocumentNFT is ERC1155 {
         bytes32 hash;
         address owner;
         string documentType;
-        address issuingAuthority;
         uint256 issuingDate;
         uint256 expirationDate;
+        string fileName;
+        string ipfsHash;
     }
 
     // Mapping from token ID to document metadata
     mapping(uint256 => DocumentMetadata) public documents;
+
+    // Mapping from token ID to authorities' signatures
+    mapping(uint256 => mapping(address => bool)) public documentSignatures;
 
     // Event emitted when a new document NFT is minted
     event DocumentMinted(uint256 indexed tokenId, address indexed owner);
@@ -36,28 +40,60 @@ contract DocumentNFT is ERC1155 {
         address _to,
         bytes32 _hash,
         string memory _documentType,
-        address _issuingAuthority, // Changed to address
         uint256 _issuingDate,
-        uint256 _expirationDate
+        uint256 _expirationDate,
+        string memory _fileName,
+        string memory _ipfsHash
     ) external returns (uint256) {
-        AuthorityRegistry.Authority memory authority = authorityRegistry.getAuthority(_issuingAuthority);
-        require(authority.authorityAddress != address(0), "Invalid authority");
-        
+        // Generate a unique token ID using hash and recipient address
         uint256 tokenId = uint256(keccak256(abi.encodePacked(_to, _hash)));
-        documents[tokenId] = DocumentMetadata(_hash, _to, _documentType, _issuingAuthority, _issuingDate, _expirationDate);
+
+        // Create document metadata struct
+        DocumentMetadata memory metadata;
+        metadata.hash = _hash;
+        metadata.owner = _to;
+        metadata.documentType = _documentType;
+        metadata.issuingDate = _issuingDate;
+        metadata.expirationDate = _expirationDate;
+        metadata.fileName = _fileName;
+        metadata.ipfsHash = _ipfsHash;
+
+        // Store document metadata
+        documents[tokenId] = metadata;
+
+        // Mint the NFT
         _mint(_to, tokenId, 1, "");
+
+        // Emit event
         emit DocumentMinted(tokenId, _to);
+
         return tokenId;
     }
 
     // Function to sign a document
-    function signDocument(uint256 tokenId, bytes32 r, bytes32 s, uint8 v) external {
-        signature.signDocument(tokenId, r, s, v);
+    function signDocument(uint256 tokenId) external {
+        // Ensure the document exists
+        require(documents[tokenId].owner != address(0), "Document does not exist");
+        
+        // Get the sender's address
+        address signer = msg.sender;
+
+        // Check if the signer is a registered authority
+        AuthorityRegistry.Authority memory authority = authorityRegistry.getAuthority(signer);
+        require(authority.authorityAddress != address(0), "Signer is not a registered authority");
+
+        // Mark the signer as having signed the document
+        documentSignatures[tokenId][signer] = true;
     }
 
     // Function to verify if a document is signed by a list of authorities
     function verifySignatures(uint256 tokenId, address[] memory authorities) external view returns (bool) {
-        return signature.verifySignatures(tokenId, authorities);
+        for (uint256 i = 0; i < authorities.length; i++) {
+            if (!documentSignatures[tokenId][authorities[i]]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Function to get document metadata
